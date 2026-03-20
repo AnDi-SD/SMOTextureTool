@@ -7,7 +7,7 @@
 
 ## 🌐 Language / Язык
 
-- 🇬🇧 [English](#english)
+- EN [English](#english)
 - 🇷🇺 [Русский](#русский)
 
 ---
