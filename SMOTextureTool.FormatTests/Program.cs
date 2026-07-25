@@ -1,6 +1,8 @@
 using SMOTextureTool.Core;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using System.Buffers.Binary;
 
 var expectedCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
 {
@@ -8,6 +10,8 @@ var expectedCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCas
     ["bloom_ball.smo"] = 2,
     ["Bloom_body.smo"] = 2,
     ["bloom_goth.smo"] = 2,
+    ["bloom_hair.smo"] = 1,
+    ["bloom_jeans.smo"] = 2,
     ["bloom_school.smo"] = 2,
     ["book.smo"] = 1,
     ["butterfly.smo"] = 1,
@@ -17,7 +21,7 @@ var expectedCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCas
     ["Grizelda.smo"] = 3
 };
 
-string samples = args.FirstOrDefault()
+string samples = args.FirstOrDefault(argument => !argument.StartsWith("--", StringComparison.Ordinal))
     ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Samples"));
 string temporary = Path.Combine(Path.GetTempPath(), $"smo-format-tests-{Guid.NewGuid():N}");
 Directory.CreateDirectory(temporary);
@@ -72,7 +76,56 @@ try
     Assert(resizedFile.Length == resizeOriginal.Length + (512 * 256 - 64 * 64) * 4,
         "Итоговый размер SMO пересчитан неверно.");
 
-    Console.WriteLine($"PASS: {expectedCounts.Count} файлов, {checkedTextures} вариантов round-trip.");
+    string bloomSource = Path.Combine(samples, "Bloom_body.smo");
+    byte[] bloomOriginal = File.ReadAllBytes(bloomSource);
+    SmoDocument bloomDocument = SmoDocument.Parse(bloomOriginal);
+    string bodyPng = Path.Combine(temporary, "bloom-body-1024.png");
+    string eyePng = Path.Combine(temporary, "bloom-eye-256.png");
+    using (Image<Rgba32> bodyImage = bloomDocument.Decode(bloomDocument.Textures[0]))
+    {
+        bodyImage.Mutate(context => context.Resize(1024, 1024));
+        bodyImage.SaveAsPng(bodyPng);
+    }
+    using (Image<Rgba32> eyeImage = bloomDocument.Decode(bloomDocument.Textures[1]))
+    {
+        eyeImage.Mutate(context => context.Resize(256, 256));
+        eyeImage.SaveAsPng(eyePng);
+    }
+
+    byte[] bloomHd = bloomDocument.Repack(new Dictionary<int, string>
+    {
+        [1] = bodyPng,
+        [2] = eyePng
+    });
+    SmoDocument bloomHdDocument = SmoDocument.Parse(bloomHd);
+    Assert(bloomHdDocument.Textures[0].Width == 1024 &&
+           bloomHdDocument.Textures[0].Height == 1024,
+        "Основная BGRA-текстура Bloom не получила размер 1024×1024.");
+    Assert(bloomHdDocument.Textures[1].Width == 256 &&
+           bloomHdDocument.Textures[1].Height == 256,
+        "BGRA-текстура глаза Bloom не получила размер 256×256.");
+
+    TextureInfo bloomBody = bloomHdDocument.Textures[0];
+    Assert(ReadUInt16(bloomHd, bloomBody.BlockOffset + 0x0A) == 16384 &&
+           ReadUInt16(bloomHd, bloomBody.BlockOffset + 0x12) == 16384 &&
+           ReadUInt16(bloomHd, bloomBody.BlockOffset + 0x17) == 16384,
+        "Счётчики BGRA-блока пересчитаны неверно.");
+    Assert(ReadUInt16(bloomHd, bloomBody.BlockOffset + 0x1B) == 1024 &&
+           ReadUInt16(bloomHd, bloomBody.BlockOffset + 0x1F) == 1024,
+        "16-битные размеры BGRA-блока пересчитаны неверно.");
+
+    if (args.Contains("--emit-bloom-hd", StringComparer.OrdinalIgnoreCase))
+    {
+        string generated = Path.Combine(samples, "Generated");
+        Directory.CreateDirectory(generated);
+        string output = Path.Combine(generated, "Bloom_body_hd_test.smo");
+        File.WriteAllBytes(output, bloomHd);
+        Console.WriteLine($"EMIT: {output}");
+    }
+
+    Console.WriteLine(
+        $"PASS: {expectedCounts.Count} файлов, {checkedTextures} вариантов round-trip, " +
+        "BGRA HD 1024×1024.");
     return 0;
 }
 finally
@@ -85,3 +138,6 @@ static void Assert(bool condition, string message)
     if (!condition)
         throw new InvalidOperationException(message);
 }
+
+static ushort ReadUInt16(byte[] data, int offset) =>
+    BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(offset, 2));

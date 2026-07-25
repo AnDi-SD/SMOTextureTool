@@ -17,10 +17,9 @@ public sealed class TextureRowViewModel : INotifyPropertyChanged, IDisposable
     public string Details =>
         $"Блок 0x{Texture.BlockOffset:X} · пиксели 0x{Texture.PixelDataOffset:X} · " +
         $"{Texture.PixelDataSize:N0} байт";
-    public string ResizeNotice => Texture.CanResize
-        ? $"HD-замена разрешена до {Texture.MaxResizableDimension}×" +
-          $"{Texture.MaxResizableDimension}; стороны должны быть степенями двойки."
-        : "Для этого формата размер изображения изменять нельзя.";
+    public string ResizeNotice =>
+        $"HD-замена разрешена до {Texture.MaxResizableDimension}×" +
+        $"{Texture.MaxResizableDimension}; стороны должны быть степенями двойки.";
 
     public Bitmap? ReplacementPreview
     {

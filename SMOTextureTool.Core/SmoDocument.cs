@@ -207,7 +207,12 @@ public sealed class SmoDocument
             result.AsSpan(texture.PixelDataOffset + pixels.Length));
 
         if (image.Width != texture.Width || image.Height != texture.Height)
-            PatchResizableHeader(result, texture, image.Width, image.Height);
+        {
+            if (texture.Layout == TextureLayout.Abgr)
+                PatchAbgrHeader(result, texture, image.Width, image.Height);
+            else
+                PatchBgraHeader(result, texture, image.Width, image.Height);
+        }
 
         return result;
     }
@@ -272,7 +277,7 @@ public sealed class SmoDocument
                 $"{texture.MaxResizableDimension}×{texture.MaxResizableDimension}.");
     }
 
-    private static void PatchResizableHeader(
+    private static void PatchAbgrHeader(
         Span<byte> data, TextureInfo texture, int width, int height)
     {
         uint pixelCount = checked((uint)(width * height));
@@ -290,6 +295,25 @@ public sealed class SmoDocument
         WriteUInt32(data, block + 0x30, ((uint)width << 8) | 1);
         WriteUInt32(data, block + 0x34, (uint)width << 10);
         WriteUInt32(data, block + 0x38, (uint)width << 8);
+    }
+
+    private static void PatchBgraHeader(
+        Span<byte> data, TextureInfo texture, int width, int height)
+    {
+        uint pixelCount = checked((uint)(width * height));
+        ushort areaDiv64 = checked((ushort)(pixelCount / 64));
+        int block = texture.BlockOffset;
+
+        // These UInt16 fields cross the boundaries of the UInt32 words that
+        // made the old VariantB implementation look irregular.
+        WriteUInt16(data, block + 0x0A, areaDiv64);
+        WriteUInt16(data, block + 0x12, areaDiv64);
+        WriteUInt16(data, block + 0x17, areaDiv64);
+        WriteUInt16(data, block + 0x1B, checked((ushort)width));
+        WriteUInt16(data, block + 0x1F, checked((ushort)height));
+        WriteUInt32(data, block + 0x28, (uint)width);
+        WriteUInt32(data, block + 0x2C, checked((uint)width * 4));
+        WriteUInt32(data, block + 0x30, (uint)height);
     }
 
     private static void PatchFileHeader(Span<byte> data)
@@ -340,4 +364,7 @@ public sealed class SmoDocument
 
     private static void WriteUInt32(Span<byte> data, int offset, uint value) =>
         BinaryPrimitives.WriteUInt32LittleEndian(data.Slice(offset, 4), value);
+
+    private static void WriteUInt16(Span<byte> data, int offset, ushort value) =>
+        BinaryPrimitives.WriteUInt16LittleEndian(data.Slice(offset, 2), value);
 }
