@@ -8,11 +8,14 @@ using Avalonia.Platform.Storage;
 using SMOTextureTool.Core;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace SMOTextureTool;
 
 public sealed partial class MainWindow : Window, INotifyPropertyChanged
 {
+    private const int SafeMaximumDimension = 4096;
+
     private static readonly FilePickerFileType SmoType = new("SMO model")
         { Patterns = ["*.smo"] };
     private static readonly FilePickerFileType ImageType = new("Images")
@@ -21,6 +24,8 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     private SmoDocument? _document;
     private string? _sourcePath;
     private string _status = "Откройте исходный файл модели.";
+    private bool _safeMode = true;
+    private string _selectedPreviewMode = "RGBA на шахматном фоне";
 
     public MainWindow()
     {
@@ -29,6 +34,24 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     public ObservableCollection<TextureRowViewModel> Rows { get; } = [];
+    public IReadOnlyList<string> PreviewModes { get; } =
+    [
+        "RGBA на шахматном фоне",
+        "RGBA",
+        "Только RGB",
+        "Альфа-канал",
+        "Окраска модели"
+    ];
+    public string SelectedPreviewMode
+    {
+        get => _selectedPreviewMode;
+        set
+        {
+            if (!SetField(ref _selectedPreviewMode, value))
+                return;
+            RefreshPreviews();
+        }
+    }
     public string FileName => _sourcePath is null ? "Файл не открыт" : Path.GetFileName(_sourcePath);
     public string Summary => _document is null
         ? "—"
@@ -36,6 +59,19 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
           $"{Rows.Count(row => row.HasReplacement)} замен";
     public bool HasDocument => _document is not null;
     public bool HasReplacements => Rows.Any(row => row.HasReplacement);
+    public bool SafeMode
+    {
+        get => _safeMode;
+        set
+        {
+            if (!SetField(ref _safeMode, value))
+                return;
+            Status = value
+                ? "Безопасный режим включён: новые текстуры ограничены размером 4096×4096."
+                : "Экспериментальный режим: разрешены текстуры до 16384×16384. Возможен сбой игры или нехватка памяти.";
+        }
+    }
+
     public string Status
     {
         get => _status;
@@ -61,11 +97,16 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
             foreach (TextureInfo texture in document.Textures)
             {
                 using SixLabors.ImageSharp.Image<Rgba32> image = document.Decode(texture);
-                Rows.Add(new TextureRowViewModel
+                VertexColorBindingInfo? binding = null;
+                if (SelectedPreviewMode == "Окраска модели")
+                    document.TryApplyVertexColors(texture, image, out binding);
+                var row = new TextureRowViewModel
                 {
                     Texture = texture,
-                    OriginalPreview = ToBitmap(image)
-                });
+                    OriginalPreview = ToPreviewBitmap(image)
+                };
+                row.SetVertexColorBinding(binding);
+                Rows.Add(row);
             }
             Status = document.Textures.Count == 0
                 ? "Поддерживаемые текстуры не найдены."
@@ -107,15 +148,26 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
             return;
 
         int found = 0;
+        int rejected = 0;
         foreach (TextureRowViewModel row in Rows)
         {
             string path = Path.Combine(folders[0].Path.LocalPath, row.Texture.FileName);
             if (!File.Exists(path))
                 continue;
-            row.SetReplacement(path, new Bitmap(path));
-            found++;
+            try
+            {
+                using SixLabors.ImageSharp.Image<Rgba32> image =
+                    SixLabors.ImageSharp.Image.Load<Rgba32>(path);
+                ValidateDimensions(row.Texture, image.Width, image.Height);
+                row.SetReplacement(path, ToPreviewBitmap(image));
+                found++;
+            }
+            catch
+            {
+                rejected++;
+            }
         }
-        Status = $"Найдено замен: {found} из {Rows.Count}.";
+        Status = $"Найдено замен: {found} из {Rows.Count}; отклонено: {rejected}.";
         NotifyReplacementState();
     }
 
@@ -133,8 +185,15 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
             return;
         try
         {
-            var replacements = Rows.Where(row => row.ReplacementPath is not null)
-                .ToDictionary(row => row.Texture.Index, row => row.ReplacementPath!);
+            TextureRowViewModel[] selected =
+                Rows.Where(row => row.ReplacementPath is not null).ToArray();
+            foreach (TextureRowViewModel row in selected)
+            {
+                ImageInfo info = SixLabors.ImageSharp.Image.Identify(row.ReplacementPath!);
+                ValidateDimensions(row.Texture, info.Width, info.Height);
+            }
+            var replacements = selected.ToDictionary(
+                row => row.Texture.Index, row => row.ReplacementPath!);
             byte[] result = _document.Repack(replacements);
             await File.WriteAllBytesAsync(file.Path.LocalPath, result);
             Status = $"Новый SMO сохранён и повторно проверен ({result.Length:N0} байт).";
@@ -184,8 +243,11 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
             using SixLabors.ImageSharp.Image<Rgba32> image =
                 SixLabors.ImageSharp.Image.Load<Rgba32>(path);
             ValidateDimensions(row.Texture, image.Width, image.Height);
-            row.SetReplacement(path, ToBitmap(image));
-            Status = $"Выбрана замена для текстуры {row.Texture.Index}.";
+            row.SetReplacement(path, ToPreviewBitmap(image));
+            double mib = (long)image.Width * image.Height * 4 / 1024d / 1024d;
+            Status =
+                $"Выбрана замена {image.Width}×{image.Height} для текстуры " +
+                $"{row.Texture.Index} · несжатые пиксели {mib:N0} МиБ.";
             NotifyReplacementState();
         }
         catch (Exception ex)
@@ -209,18 +271,23 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         base.OnClosed(e);
     }
 
-    private static void ValidateDimensions(TextureInfo texture, int width, int height)
+    private void ValidateDimensions(TextureInfo texture, int width, int height)
     {
         bool resized = width != texture.Width || height != texture.Height;
         if (resized && !texture.CanResize)
             throw new SmoFormatException("Для этого формата требуется исходный размер.");
         if (resized && (!IsPowerOfTwo(width) || !IsPowerOfTwo(height)))
             throw new SmoFormatException("Стороны нового изображения должны быть степенями двойки.");
+        int maximumDimension = SafeMode
+            ? SafeMaximumDimension
+            : TextureInfo.MaximumCurrentHeaderDimension;
         if (resized &&
-            (width > texture.MaxResizableDimension || height > texture.MaxResizableDimension))
+            (width > maximumDimension || height > maximumDimension))
             throw new SmoFormatException(
-                $"Максимальный подтверждённый размер — {texture.MaxResizableDimension}×" +
-                $"{texture.MaxResizableDimension}.");
+                SafeMode
+                    ? "Безопасный режим допускает максимум 4096×4096. " +
+                      "Для больших текстур отключите его в верхней панели."
+                    : $"Максимальная сторона — {maximumDimension} пикселей.");
     }
 
     private static bool IsPowerOfTwo(int value) => value > 0 && (value & (value - 1)) == 0;
@@ -231,6 +298,101 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         image.SaveAsPng(stream);
         stream.Position = 0;
         return new Bitmap(stream);
+    }
+
+    private Bitmap ToPreviewBitmap(SixLabors.ImageSharp.Image<Rgba32> image)
+    {
+        const int maximumPreviewSide = 512;
+        SixLabors.ImageSharp.Image<Rgba32> preview;
+        if (image.Width <= maximumPreviewSide && image.Height <= maximumPreviewSide)
+        {
+            preview = image.Clone();
+        }
+        else
+        {
+            double scale = Math.Min(
+                maximumPreviewSide / (double)image.Width,
+                maximumPreviewSide / (double)image.Height);
+            int width = Math.Max(1, (int)Math.Round(image.Width * scale));
+            int height = Math.Max(1, (int)Math.Round(image.Height * scale));
+            preview = image.Clone(context => context.Resize(width, height));
+        }
+
+        using (preview)
+        {
+            ApplyPreviewMode(preview, SelectedPreviewMode);
+            return ToBitmap(preview);
+        }
+    }
+
+    private static void ApplyPreviewMode(
+        SixLabors.ImageSharp.Image<Rgba32> image, string mode)
+    {
+        image.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < accessor.Height; y++)
+            {
+                Span<Rgba32> row = accessor.GetRowSpan(y);
+                for (int x = 0; x < row.Length; x++)
+                {
+                    Rgba32 pixel = row[x];
+                    row[x] = mode switch
+                    {
+                        "Только RGB" => new Rgba32(pixel.R, pixel.G, pixel.B, 255),
+                        "Альфа-канал" => new Rgba32(pixel.A, pixel.A, pixel.A, 255),
+                        "RGBA на шахматном фоне" => CompositeOnCheckerboard(pixel, x, y),
+                        _ => pixel
+                    };
+                }
+            }
+        });
+    }
+
+    private static Rgba32 CompositeOnCheckerboard(Rgba32 pixel, int x, int y)
+    {
+        byte background = ((x / 12 + y / 12) & 1) == 0 ? (byte)72 : (byte)112;
+        int alpha = pixel.A;
+        return new Rgba32(
+            (byte)((pixel.R * alpha + background * (255 - alpha)) / 255),
+            (byte)((pixel.G * alpha + background * (255 - alpha)) / 255),
+            (byte)((pixel.B * alpha + background * (255 - alpha)) / 255),
+            255);
+    }
+
+    private void RefreshPreviews()
+    {
+        if (_document is null)
+            return;
+
+        try
+        {
+            foreach (TextureRowViewModel row in Rows)
+            {
+                using SixLabors.ImageSharp.Image<Rgba32> original =
+                    _document.Decode(row.Texture);
+                VertexColorBindingInfo? binding = null;
+                if (SelectedPreviewMode == "Окраска модели")
+                    _document.TryApplyVertexColors(
+                        row.Texture, original, out binding);
+                row.SetVertexColorBinding(binding);
+                Bitmap originalPreview = ToPreviewBitmap(original);
+                Bitmap? replacementPreview = null;
+                if (row.ReplacementPath is not null)
+                {
+                    using SixLabors.ImageSharp.Image<Rgba32> replacement =
+                        SixLabors.ImageSharp.Image.Load<Rgba32>(row.ReplacementPath);
+                    if (SelectedPreviewMode == "Окраска модели")
+                        _document.TryApplyVertexColors(row.Texture, replacement);
+                    replacementPreview = ToPreviewBitmap(replacement);
+                }
+                row.UpdatePreviews(originalPreview, replacementPreview);
+            }
+            Status = $"Режим предпросмотра: {SelectedPreviewMode}.";
+        }
+        catch (Exception ex)
+        {
+            Status = $"Не удалось обновить предпросмотр: {ex.Message}";
+        }
     }
 
     private void ClearRows()

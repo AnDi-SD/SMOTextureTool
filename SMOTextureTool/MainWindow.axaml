@@ -6,13 +6,21 @@
   <Grid RowDefinitions="Auto,Auto,*">
     <Border Background="#171A21" BorderBrush="#2A2F3A"
             BorderThickness="0,0,0,1" Padding="24,20">
-      <Grid ColumnDefinitions="*,Auto">
+      <Grid ColumnDefinitions="*,240,Auto,Auto">
         <StackPanel Spacing="4">
           <TextBlock Text="SMO Texture Tool" FontSize="26" FontWeight="SemiBold" />
           <TextBlock Text="Извлечение и безопасная замена текстур Winx Club PC"
                      Foreground="#9299A8" />
         </StackPanel>
-        <Button Grid.Column="1" Classes="action" Click="OpenFile_Click"
+        <ComboBox Grid.Column="1" Margin="0,0,16,0"
+                  VerticalAlignment="Center"
+                  ItemsSource="{Binding PreviewModes}"
+                  SelectedItem="{Binding SelectedPreviewMode}" />
+        <CheckBox Grid.Column="2" Margin="0,0,20,0"
+                  VerticalAlignment="Center"
+                  IsChecked="{Binding SafeMode}"
+                  Content="Безопасный режим · максимум 4096²" />
+        <Button Grid.Column="3" Classes="action" Click="OpenFile_Click"
                 Content="Открыть SMO" />
       </Grid>
     </Border>
@@ -47,7 +55,7 @@
           <DataTemplate>
             <Border Classes="card">
               <Grid ColumnDefinitions="220,52,220,*,220"
-                    RowDefinitions="Auto,220">
+                    RowDefinitions="Auto,320">
                 <TextBlock Grid.ColumnSpan="5" Text="{Binding Header}"
                            FontWeight="SemiBold" Margin="0,0,0,12" />
                 <Border Grid.Row="1" Background="#0D0F14" CornerRadius="8"
@@ -70,6 +78,14 @@
                 <StackPanel Grid.Row="1" Grid.Column="3" Margin="24,8,20,8"
                             VerticalAlignment="Center" Spacing="6">
                   <TextBlock Text="{Binding Details}" Foreground="#AAB1C0"
+                             TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding ChannelDetails}" Foreground="#AAB1C0"
+                             TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding ResourceDetails}" Foreground="#9ED7A5"
+                             TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding VertexColorDetails}" Foreground="#C3A6FF"
+                             TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding MaterialDetails}" Foreground="#74B9FF"
                              TextWrapping="Wrap" />
                   <TextBlock Text="{Binding ResizeNotice}" Foreground="#E8B86D"
                              TextWrapping="Wrap" />

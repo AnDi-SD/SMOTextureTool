@@ -7,6 +7,7 @@ using System.Buffers.Binary;
 var expectedCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
 {
     ["Alfea01.smo"] = 64,
+    ["Alfea02.smo"] = 86,
     ["bloom_ball.smo"] = 2,
     ["Bloom_body.smo"] = 2,
     ["bloom_goth.smo"] = 2,
@@ -40,6 +41,30 @@ try
         Assert(expectedCounts.TryGetValue(name, out int expected), $"Нет эталона для {name}.");
         Assert(document.Textures.Count == expected,
             $"{name}: ожидалось {expected} текстур, найдено {document.Textures.Count}.");
+        Assert(document.Textures.All(texture => texture.Material is not null),
+            $"{name}: не для всех текстур найден контейнер spMaterialData.");
+        Assert(document.Textures.All(texture =>
+                texture.Material is
+                {
+                    MaterialRenderStates.Count: 11,
+                    LayerTextureStates.Count: 9
+                }),
+            $"{name}: граф материала не содержит полные массивы состояний 11+9.");
+        Assert(document.Textures.All(texture =>
+                texture.Material is { } material &&
+                material.ColorOperation == material.LayerTextureStates[1] &&
+                material.AlphaOperation == material.LayerTextureStates[2] &&
+                material.AddressU == material.LayerTextureStates[3] &&
+                material.AddressV == material.LayerTextureStates[4] &&
+                material.BorderColor == material.LayerTextureStates[5] &&
+                material.Filter == material.LayerTextureStates[6] &&
+                material.TextureCoordinateIndex == material.LayerTextureStates[7] &&
+                material.TextureTransformFlags == material.LayerTextureStates[8]),
+            $"{name}: именованные состояния текстурного слоя читаются неверно.");
+        Assert(document.Textures.All(texture =>
+                texture.ContentKind == TextureContentKind.Monochrome ==
+                texture.Channels.RgbChannelsIdentical),
+            $"{name}: тип содержимого не соответствует фактическим RGB-каналам.");
         Assert(document.Repack(new Dictionary<int, string>()).SequenceEqual(original),
             $"{name}: пересборка без замен изменила файл.");
 
@@ -57,6 +82,43 @@ try
             checkedTextures++;
         }
 
+        if (name.Equals("Alfea02.smo", StringComparison.OrdinalIgnoreCase))
+        {
+            TextureInfo phoneTexture = document.Textures[34];
+            using Image<Rgba32> phonePreview = document.Decode(phoneTexture);
+            Assert(document.TryApplyVertexColors(
+                    phoneTexture, phonePreview,
+                    out VertexColorBindingInfo? phoneBinding),
+                "Alfea02: не удалось применить цвета вершин к текстуре телефона №35.");
+            Assert(phoneBinding is
+                {
+                    ModelOffset: 0x175314,
+                    MeshOffset: 0x185421,
+                    VertexCount: 474,
+                    TriangleCount: 296,
+                    InfluencingVertexIndices.Count: 474,
+                    ConflictingPixelWrites: 18568
+                },
+                $"Alfea02: неверная привязка телефона: {phoneBinding}.");
+            bool containsColor = false;
+            phonePreview.ProcessPixelRows(accessor =>
+            {
+                for (int y = 0; y < accessor.Height && !containsColor; y++)
+                {
+                    foreach (Rgba32 pixel in accessor.GetRowSpan(y))
+                    {
+                        if (pixel.R != pixel.G || pixel.G != pixel.B)
+                        {
+                            containsColor = true;
+                            break;
+                        }
+                    }
+                }
+            });
+            Assert(containsColor,
+                "Alfea02: окрашенный предпросмотр телефона остался монохромным.");
+        }
+
         Console.WriteLine($"OK  {name,-20} textures={document.Textures.Count}");
     }
 
@@ -66,15 +128,42 @@ try
     string resizeSource = Path.Combine(samples, "butterfly.smo");
     byte[] resizeOriginal = File.ReadAllBytes(resizeSource);
     SmoDocument resizeDocument = SmoDocument.Parse(resizeOriginal);
-    string resizedPng = Path.Combine(temporary, "resized-512x256.png");
-    using (var resizedImage = new Image<Rgba32>(512, 256, new Rgba32(20, 40, 60, 255)))
+    string resizedPng = Path.Combine(temporary, "resized-2048.png");
+    using (var resizedImage = new Image<Rgba32>(2048, 2048, new Rgba32(20, 40, 60, 255)))
         resizedImage.SaveAsPng(resizedPng);
     byte[] resizedFile = resizeDocument.Repack(new Dictionary<int, string> { [1] = resizedPng });
     SmoDocument resizedDocument = SmoDocument.Parse(resizedFile);
-    Assert(resizedDocument.Textures[0].Width == 512 && resizedDocument.Textures[0].Height == 256,
+    Assert(resizedDocument.Textures[0].Width == 2048 &&
+           resizedDocument.Textures[0].Height == 2048,
         "Изменённые размеры текстуры не сохранились.");
-    Assert(resizedFile.Length == resizeOriginal.Length + (512 * 256 - 64 * 64) * 4,
+    Assert(resizedFile.Length == resizeOriginal.Length + (2048 * 2048 - 64 * 64) * 4,
         "Итоговый размер SMO пересчитан неверно.");
+    TextureInfo resizedTexture = resizedDocument.Textures[0];
+    uint resizedPixelBytes = checked((uint)resizedTexture.PixelDataSize);
+    Assert(ReadUInt32(resizedFile, resizedTexture.BlockOffset + 0x09) == resizedPixelBytes + 0x32 &&
+           ReadUInt32(resizedFile, resizedTexture.BlockOffset + 0x1A) == resizedPixelBytes + 0x20 &&
+           ReadUInt32(resizedFile, resizedTexture.BlockOffset + 0x1F) == resizedPixelBytes + 0x1A,
+        "32-битные размеры вложенных ABGR-блоков записаны неверно.");
+
+    if (args.Contains("--emit-alfea-2048", StringComparer.OrdinalIgnoreCase))
+    {
+        string alfeaSource = Path.Combine(samples, "Alfea01.smo");
+        SmoDocument alfeaDocument = SmoDocument.Load(alfeaSource);
+        string alfeaPng = Path.Combine(temporary, "alfea-texture-2048.png");
+        using (Image<Rgba32> alfeaImage = alfeaDocument.Decode(alfeaDocument.Textures[0]))
+        {
+            alfeaImage.Mutate(context => context.Resize(2048, 2048));
+            alfeaImage.SaveAsPng(alfeaPng);
+        }
+
+        byte[] alfeaHd = alfeaDocument.Repack(
+            new Dictionary<int, string> { [1] = alfeaPng });
+        string generated = Path.Combine(samples, "Generated");
+        Directory.CreateDirectory(generated);
+        string output = Path.Combine(generated, "Alfea01_hd_2048_test.smo");
+        File.WriteAllBytes(output, alfeaHd);
+        Console.WriteLine($"EMIT: {output}");
+    }
 
     string bloomSource = Path.Combine(samples, "Bloom_body.smo");
     byte[] bloomOriginal = File.ReadAllBytes(bloomSource);
@@ -106,13 +195,14 @@ try
         "BGRA-текстура глаза Bloom не получила размер 256×256.");
 
     TextureInfo bloomBody = bloomHdDocument.Textures[0];
-    Assert(ReadUInt16(bloomHd, bloomBody.BlockOffset + 0x0A) == 16384 &&
-           ReadUInt16(bloomHd, bloomBody.BlockOffset + 0x12) == 16384 &&
-           ReadUInt16(bloomHd, bloomBody.BlockOffset + 0x17) == 16384,
-        "Счётчики BGRA-блока пересчитаны неверно.");
-    Assert(ReadUInt16(bloomHd, bloomBody.BlockOffset + 0x1B) == 1024 &&
-           ReadUInt16(bloomHd, bloomBody.BlockOffset + 0x1F) == 1024,
-        "16-битные размеры BGRA-блока пересчитаны неверно.");
+    uint bloomPixelBytes = checked((uint)bloomBody.PixelDataSize);
+    Assert(ReadUInt32(bloomHd, bloomBody.BlockOffset + 0x09) == bloomPixelBytes + 0x29 &&
+           ReadUInt32(bloomHd, bloomBody.BlockOffset + 0x11) == bloomPixelBytes + 0x20 &&
+           ReadUInt32(bloomHd, bloomBody.BlockOffset + 0x16) == bloomPixelBytes + 0x1A,
+        "32-битные размеры вложенных BGRA-блоков записаны неверно.");
+    Assert(ReadUInt32(bloomHd, bloomBody.BlockOffset + 0x1B) == 1024 &&
+           ReadUInt32(bloomHd, bloomBody.BlockOffset + 0x1F) == 1024,
+        "32-битные размеры BGRA-блока пересчитаны неверно.");
 
     if (args.Contains("--emit-bloom-hd", StringComparer.OrdinalIgnoreCase))
     {
@@ -139,5 +229,5 @@ static void Assert(bool condition, string message)
         throw new InvalidOperationException(message);
 }
 
-static ushort ReadUInt16(byte[] data, int offset) =>
-    BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(offset, 2));
+static uint ReadUInt32(byte[] data, int offset) =>
+    BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(offset, 4));
