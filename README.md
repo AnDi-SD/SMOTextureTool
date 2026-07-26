@@ -139,7 +139,14 @@ Project structure:
 
 ## 📜 License
 
-Licensed under the GNU General Public License v3.0.
+Copyright © 2026 AnDi-SD.
+
+Original project: https://github.com/AnDi-SD/SMOTextureTool
+
+Licensed under the GNU General Public License v3.0 or later. You may use,
+redistribute, and modify the program under its terms. When distributing copies
+or modified versions, preserve the copyright, license, and origin notices.
+See `COPYRIGHT.txt` and `LICENSE.txt`.
 
 ---
 
@@ -255,4 +262,12 @@ dotnet run --project SMOTextureTool.FormatTests/SMOTextureTool.FormatTests.cspro
 
 ## 📜 Лицензия
 
-Проект распространяется по лицензии GNU General Public License v3.0.
+Copyright © 2026 AnDi-SD.
+
+Оригинальный проект: https://github.com/AnDi-SD/SMOTextureTool
+
+Проект распространяется по лицензии GNU General Public License v3.0 или более
+поздней версии. Программу можно использовать, распространять и изменять на
+условиях GPL. При распространении копий и изменённых версий необходимо
+сохранять сведения об авторе, лицензии и происхождении проекта. Полные условия
+находятся в `COPYRIGHT.txt` и `LICENSE.txt`.
