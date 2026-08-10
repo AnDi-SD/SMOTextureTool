@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="SMOTextureTool.MainWindow"
-        Title="SMO Texture Tool 2.0" Width="1280" Height="820"
+        Title="SMO Texture Tool 2.0 — read-only" Width="1280" Height="820"
         MinWidth="900" MinHeight="600" Background="#0F1117">
   <Grid RowDefinitions="Auto,Auto,*">
     <Border Background="#171A21" BorderBrush="#2A2F3A"
@@ -9,8 +9,8 @@
       <Grid ColumnDefinitions="*,240,Auto,Auto">
         <StackPanel Spacing="4">
           <TextBlock Text="SMO Texture Tool" FontSize="26" FontWeight="SemiBold" />
-          <TextBlock Text="Извлечение и безопасная замена текстур Winx Club PC"
-                     Foreground="#9299A8" />
+          <TextBlock Text="Только просмотр и экспорт · writer/repack отключены: созданные файлы вызывают вылет игры"
+                     Foreground="#FF8A80" />
         </StackPanel>
         <ComboBox Grid.Column="1" Margin="0,0,16,0"
                   VerticalAlignment="Center"
@@ -36,11 +36,11 @@
                 IsEnabled="{Binding HasDocument}" Click="ExtractAll_Click"
                 Content="Извлечь все" />
         <Button Grid.Column="2" Classes="action" Margin="8,0,0,0"
-                IsEnabled="{Binding HasDocument}" Click="SelectFolder_Click"
-                Content="Папка замен" />
+                IsEnabled="False" Click="SelectFolder_Click"
+                Content="Замена отключена" />
         <Button Grid.Column="3" Classes="action" Margin="8,0,0,0"
-                IsEnabled="{Binding HasReplacements}" Click="Save_Click"
-                Content="Сохранить новый SMO" />
+                IsEnabled="False" Click="Save_Click"
+                Content="Writer отключён" />
         <TextBlock Grid.Row="1" Grid.ColumnSpan="4" Margin="0,10,0,0"
                    Text="{Binding Status}" Foreground="#74B9FF"
                    TextWrapping="Wrap" />
@@ -101,7 +101,7 @@
                           Content="Сохранить PNG" />
                   <Button Classes="action" HorizontalAlignment="Stretch"
                           Tag="{Binding}" Click="ChooseReplacement_Click"
-                          Content="Выбрать замену" />
+                          IsEnabled="False" Content="Замена отключена" />
                   <Button Classes="action" HorizontalAlignment="Stretch"
                           Tag="{Binding}" Click="ResetReplacement_Click"
                           IsEnabled="{Binding HasReplacement}" Content="Сбросить" />

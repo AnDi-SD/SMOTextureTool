@@ -3,6 +3,17 @@
 **Texture extractor and repacker for Winx Club PC `.smo` models**<br>
 **Инструмент для извлечения и замены текстур в `.smo`-моделях Winx Club для ПК**
 
+> [!WARNING]
+> **The writer/repacker is not game-safe and is disabled.** Files produced by
+> the former replacement path could pass this tool's validation and still crash
+> the game. Use this application only to inspect and export textures. For the
+> game-tested fixed-size RGB replacement path, use `tools/SmoImporter`.
+>
+> **Запись/repack не совместимы с игрой и отключены.** Созданные прежним
+> алгоритмом файлы могли проходить внутреннюю проверку, но вызывать вылет игры.
+> Используйте программу только для просмотра и экспорта текстур. Подтверждённая
+> в игре fixed-size замена RGB реализована в `tools/SmoImporter`.
+
 ---
 
 ## 🌐 Language / Язык
@@ -19,16 +30,16 @@
 **SMO Texture Tool 2.0** is a desktop utility for editing embedded textures in
 model files from the PC version of **Winx Club**.
 
-It can:
+Its currently supported read-only workflow can:
 
 - find and preview every supported texture in an SMO file;
 - export one texture or the complete set as PNG;
-- replace textures individually or from a folder;
-- use larger HD replacements and recalculate all affected 32-bit block sizes;
 - preserve ABGR and BGRA channel layouts used by the game;
 - inspect RGB and Alpha channels separately;
 - preview grayscale textures with the vertex colors of their actual model;
-- rebuild and validate the resulting SMO before saving it.
+
+Texture replacement, resizing and SMO repacking are retained only as research
+code. Their GUI controls are disabled and their output must not be used in-game.
 
 Version 2.0 has been rewritten with **Avalonia UI** and no longer depends on the
 Visual Studio WinForms designer.
@@ -62,7 +73,7 @@ The preview selector can show:
 - **Model coloring**, which multiplies grayscale texture data by the diffuse
   vertex colors of its linked mesh.
 
-### 3. Edit textures
+### 3. Edit textures externally
 
 Edit the exported PNG files in an image editor. Keep their filenames if you
 want to load a complete replacement folder.
@@ -71,25 +82,25 @@ Grayscale model-colored textures should normally remain grayscale. Their pink,
 yellow, or other final colors are stored in the model vertices and applied by
 the game with `D3DTOP_MODULATE`.
 
-### 4. Choose replacements
+### 4. Replacement (disabled)
 
-Use **Choose replacement** for one texture or **Replacement folder** for a
-complete set.
+The former replacement controls are disabled because parser validation did not
+predict compatibility with the original game.
 
 Replacement images may be PNG, BMP, or JPEG. Both dimensions must be powers of
 two.
 
-### 5. Save a new SMO
+### 5. Save a new SMO (disabled)
 
-Click **Save new SMO**. The utility updates nested texture blocks and the main
-file header, then parses the generated file again before writing it.
+Do not use the old repacker for game files. Use `SmoImporter`'s fixed-size RGB
+writer, which preserves the original alpha bytes, headers, offsets and file size.
 
-## 🖼 HD textures
+## 🖼 HD textures (historical, not validated)
 
 - Safe mode allows textures up to `4096×4096`.
 - Experimental mode allows up to `16384×16384`.
-- `1024×1024` and `2048×2048` replacements have been tested in the original
-  game.
+- Earlier claims about successful `1024×1024` and `2048×2048` replacements are
+  superseded and require independent revalidation.
 - Texture data is stored uncompressed at four bytes per pixel, so very large
   replacements substantially increase both file size and video-memory usage.
 
@@ -154,19 +165,21 @@ See `COPYRIGHT.txt` and `LICENSE.txt`.
 
 ## 📌 Описание
 
-**SMO Texture Tool 2.0** — настольная программа для редактирования встроенных
-текстур в файлах моделей ПК-версии **Winx Club**.
+**SMO Texture Tool 2.0** — read-only программа для исследования встроенных
+текстур в файлах моделей ПК-версии **Winx Club**. Запись файлов отключена:
+результаты прежнего repack могли проходить проверку программы, но вызывать
+вылет оригинальной игры.
 
 Возможности:
 
 - поиск и просмотр всех поддерживаемых текстур внутри SMO;
 - сохранение отдельной текстуры или всего набора в PNG;
-- замена по одной текстуре или целой папкой;
-- установка HD-текстур с пересчётом всех вложенных 32-битных размеров;
 - сохранение используемых игрой раскладок каналов ABGR и BGRA;
 - отдельный просмотр RGB и Alpha;
 - просмотр серых текстур с цветами вершин их настоящей модели;
-- повторная проверка собранного SMO перед сохранением.
+
+Код замены и repack сохранён только для исследования формата. Для подтверждённой
+игрой fixed-size замены RGB используйте `tools/SmoImporter`.
 
 Версия 2.0 полностью переписана на **Avalonia UI** и больше не зависит от
 WinForms Designer в Visual Studio.
@@ -209,30 +222,29 @@ https://github.com/AnDi-SD/SMOTextureTool/releases
 другие итоговые цвета находятся в вершинах модели и накладываются игрой через
 `D3DTOP_MODULATE`.
 
-### 4. Выбрать замены
+### 4. Замена текстур — отключена
 
-Используйте **Выбрать замену** для одной текстуры или **Папка замен** для полного
-набора.
+Элементы выбора замен отключены, поскольку внутренняя проверка parser-ом не
+гарантирует, что полученный файл загрузится игрой.
 
-Принимаются PNG, BMP и JPEG. Обе стороны изображения должны быть степенями
-двойки.
+### 5. Сохранение нового SMO — отключено
 
-### 5. Сохранить новый SMO
+Не используйте прежний repacker для игровых файлов. `SmoImporter` сохраняет
+исходные Alpha, заголовки, смещения и размер файла, меняя только RGB существующего
+pixel buffer.
 
-Нажмите **Сохранить новый SMO**. Программа обновит вложенные текстурные блоки и
-главный заголовок файла, после чего повторно проверит полученный SMO.
+## 🖼 HD-текстуры — историческая гипотеза
 
-## 🖼 HD-текстуры
-
-- Безопасный режим разрешает размеры до `4096×4096`.
-- Экспериментальный режим — до `16384×16384`.
-- Замены `1024×1024` и `2048×2048` проверены в оригинальной игре.
+- Прежние пределы `4096×4096` и `16384×16384` относятся только к возможностям
+  parser/repacker и не означают совместимость с игрой.
+- Заявления о проверке замен `1024×1024` и `2048×2048` считаются недействительными
+  до независимого повторного подтверждения.
 - Текстуры хранятся без сжатия по четыре байта на пиксель, поэтому очень большие
   изображения заметно увеличивают файл и расход видеопамяти.
 
 ## ⚠️ Важно
 
-- Всегда сохраняйте результат в новый SMO и оставляйте оригинал.
+- Используйте программу только для просмотра и извлечения; writer отключён.
 - Цветная UV-развёртка является диагностическим предпросмотром. Пересекающиеся
   поверхности могут использовать одни пиксели с разными цветами вершин, поэтому
   одна плоская картинка не способна одновременно показать все стороны модели.
