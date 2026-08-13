@@ -50,8 +50,9 @@ Download the latest build from:
 
 https://github.com/AnDi-SD/SMOTextureTool/releases
 
-The Windows x64 self-contained build does not require a separate .NET
-installation.
+The standardized workspace release uses a framework-dependent single-file build.
+If Microsoft .NET 8 Desktop Runtime (x64) is missing, its root launcher offers
+to download the official signed Microsoft installer and installs it silently.
 
 ## 🚀 How to use
 
@@ -129,15 +130,11 @@ dotnet run --project SMOTextureTool/SMOTextureTool.csproj
 dotnet run --project SMOTextureTool.FormatTests/SMOTextureTool.FormatTests.csproj
 ```
 
-Windows x64 release build:
+Windows x64 releases are built from the workspace root with the shared packager:
 
 ```powershell
-dotnet publish SMOTextureTool/SMOTextureTool.csproj `
-  -c Release -r win-x64 --self-contained true `
-  -p:PublishSingleFile=true `
-  -p:IncludeNativeLibrariesForSelfExtract=true `
-  -p:EnableCompressionInSingleFile=true `
-  -p:DebugType=None -p:DebugSymbols=false
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  ./release/Build-Releases.ps1 -Product SMOTextureTool
 ```
 
 Project structure:
@@ -190,7 +187,9 @@ WinForms Designer в Visual Studio.
 
 https://github.com/AnDi-SD/SMOTextureTool/releases
 
-Самодостаточная сборка Windows x64 не требует отдельной установки .NET.
+Корневой загрузчик Windows x64 сам проверяет Microsoft .NET 8 Desktop Runtime.
+Если компонента нет, он предлагает скачать подписанный установщик Microsoft и
+выполняет тихую установку; Windows может показать стандартное подтверждение UAC.
 
 ## 🚀 Использование
 
