@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.1 — In development
+
+- Standardized workspace packaging: a clean release root, a framework-dependent
+  single-file application, and the shared Microsoft .NET 8 Desktop Runtime bootstrapper.
+- Texture inspection and replacement behavior is unchanged.
+
 ## 2.0.0
 
 ### Added
