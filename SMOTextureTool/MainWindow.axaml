@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="SMOTextureTool.MainWindow"
-        Title="SMO Texture Tool 2.0 — read-only" Width="1280" Height="820"
+        Title="SMO Texture Tool 2.1 — read-only" Width="1280" Height="820"
         MinWidth="900" MinHeight="600" Background="#0F1117">
   <Grid RowDefinitions="Auto,Auto,*">
     <Border Background="#171A21" BorderBrush="#2A2F3A"

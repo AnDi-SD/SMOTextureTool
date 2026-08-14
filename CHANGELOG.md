@@ -1,10 +1,29 @@
 # Changelog
 
-## 2.0.1 — In development
+## 2.1.0 — 2026-08-14
+
+### Fixed
+
+- Corrected `0x32E3`/`0x43E3` parsing: `+0x3C` is the required zero
+  `spDataBlockSerializer` marker and the BGRA pixel payload starts at `+0x3D`.
+- Corrected the serialized `0x32E3`/`0x43E3` dimension mirror at `+0x38` to
+  store `height << 8` instead of repeating the width.
+
+### Added
+
+- Strict serializer-marker validation for `0x32E3`/`0x43E3` blocks.
+- First/last-pixel, byte-identical round-trip, malformed-marker and rectangular
+  `128x64` resize regressions for the corrected BGRA layout.
+
+### Verified
+
+- Confirmed the corrected fixed-size full-BGRA/Alpha control file through the
+  native game loader; resize/repack remains research-only and disabled in the GUI.
+
+## 2.0.1 — 2026-08-13
 
 - Standardized workspace packaging: a clean release root, a framework-dependent
   single-file application, and the shared Microsoft .NET 8 Desktop Runtime bootstrapper.
-- Texture inspection and replacement behavior is unchanged.
 
 ## 2.0.0
 
@@ -23,7 +42,7 @@
 
 ### Fixed
 
-- Correct 32-bit nested sizes for ABGR `0x32E3`/`0x43E3` textures.
+- Correct 32-bit nested sizes for `0x32E3`/`0x43E3` textures.
 - Correct unaligned 32-bit sizes and dimensions for BGRA `0x29E3` textures.
 - Repacking beyond the former 2048×2048 header boundary.
 - Preservation of unknown container tails during texture growth.

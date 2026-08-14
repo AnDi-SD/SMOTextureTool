@@ -30,7 +30,9 @@ Directory.CreateDirectory(temporary);
 try
 {
     int checkedTextures = 0;
-    var checkedLayouts = new HashSet<(TextureLayout Layout, int Width, int Height)>();
+    bool markerValidationChecked = false;
+    bool rectangularHeaderChecked = false;
+    var checkedVariants = new HashSet<(ushort Format, int Width, int Height)>();
 
     foreach (string file in Directory.EnumerateFiles(samples, "*.smo").Order())
     {
@@ -70,7 +72,50 @@ try
 
         foreach (TextureInfo texture in document.Textures)
         {
-            if (!checkedLayouts.Add((texture.Layout, texture.Width, texture.Height)))
+            if (texture.FormatCode is 0x32E3 or 0x43E3)
+            {
+                int markerOffset = checked(texture.BlockOffset + 0x3C);
+                Assert(texture.Layout == TextureLayout.Bgra,
+                    $"{name}, текстура {texture.Index}: формат 0x{texture.FormatCode:X4} " +
+                    $"ошибочно объявлен как {texture.Layout}, ожидался BGRA.");
+                Assert(texture.PixelDataOffset == texture.BlockOffset + 0x3D,
+                    $"{name}, текстура {texture.Index}: BGRA payload начинается не с +0x3D.");
+                Assert(original[markerOffset] == 0,
+                    $"{name}, текстура {texture.Index}: marker на +0x3C не равен 00.");
+
+                if (texture.Width == 128 && texture.Height == 64)
+                {
+                    Assert(ReadUInt32(original, texture.BlockOffset + 0x24) == 128 &&
+                           ReadUInt32(original, texture.BlockOffset + 0x28) == 64 &&
+                           ReadUInt32(original, texture.BlockOffset + 0x38) == 64u << 8,
+                        $"{name}, текстура {texture.Index}: pristine-заголовок 128x64 " +
+                        "не хранит height << 8 на +0x38.");
+                    rectangularHeaderChecked = true;
+                }
+
+                using Image<Rgba32> decoded = document.Decode(texture);
+                AssertRawBgraPixel(
+                    original, texture.PixelDataOffset, decoded[0, 0],
+                    $"{name}, текстура {texture.Index}, первый пиксель");
+                int lastPixelOffset = checked(
+                    texture.PixelDataOffset + texture.PixelDataSize - 4);
+                AssertRawBgraPixel(
+                    original, lastPixelOffset,
+                    decoded[texture.Width - 1, texture.Height - 1],
+                    $"{name}, текстура {texture.Index}, последний пиксель");
+
+                if (!markerValidationChecked)
+                {
+                    byte[] invalidMarker = (byte[])original.Clone();
+                    invalidMarker[markerOffset] = 0xFF;
+                    AssertThrows<SmoFormatException>(
+                        () => SmoDocument.Parse(invalidMarker),
+                        "parser принял ненулевой serializer marker на +0x3C.");
+                    markerValidationChecked = true;
+                }
+            }
+
+            if (!checkedVariants.Add((texture.FormatCode, texture.Width, texture.Height)))
                 continue;
 
             string png = Path.Combine(temporary, $"{name}-{texture.Index}.png");
@@ -79,6 +124,9 @@ try
                 { [texture.Index] = png });
             Assert(repacked.SequenceEqual(original),
                 $"{name}, текстура {texture.Index}: round-trip изменил байты.");
+            if (texture.FormatCode is 0x32E3 or 0x43E3)
+                Assert(repacked[texture.BlockOffset + 0x3C] == 0,
+                    $"{name}, текстура {texture.Index}: round-trip изменил marker на +0x3C.");
             checkedTextures++;
         }
 
@@ -124,10 +172,47 @@ try
 
     Assert(expectedCounts.Count == Directory.EnumerateFiles(samples, "*.smo").Count(),
         "Набор Samples и таблица ожиданий расходятся.");
+    Assert(markerValidationChecked,
+        "В Samples не найден формат 0x32E3/0x43E3 для проверки serializer marker.");
+    Assert(rectangularHeaderChecked,
+        "В Samples не найден pristine-блок 0x32E3/0x43E3 размером 128x64.");
 
     string resizeSource = Path.Combine(samples, "butterfly.smo");
     byte[] resizeOriginal = File.ReadAllBytes(resizeSource);
     SmoDocument resizeDocument = SmoDocument.Parse(resizeOriginal);
+    TextureInfo resizeSourceTexture = resizeDocument.Textures.Single();
+
+    string rectangularPng = Path.Combine(temporary, "resized-128x64.png");
+    var rectangularColor = new Rgba32(17, 34, 51, 68);
+    using (var rectangularImage = new Image<Rgba32>(128, 64, rectangularColor))
+        rectangularImage.SaveAsPng(rectangularPng);
+    byte[] rectangularFile = resizeDocument.Repack(
+        new Dictionary<int, string> { [resizeSourceTexture.Index] = rectangularPng });
+    SmoDocument rectangularDocument = SmoDocument.Parse(rectangularFile);
+    TextureInfo rectangularTexture = rectangularDocument.Textures.Single();
+    Assert(rectangularTexture.Width == 128 && rectangularTexture.Height == 64,
+        "Прямоугольный resize не сохранил размер 128x64.");
+    Assert(rectangularFile.Length == resizeOriginal.Length +
+           (128 * 64 * 4 - resizeSourceTexture.PixelDataSize),
+        "Размер SMO после прямоугольного resize пересчитан неверно.");
+    int rectangularBlock = rectangularTexture.BlockOffset;
+    Assert(ReadUInt32(rectangularFile, rectangularBlock + 0x24) == 128 &&
+           ReadUInt32(rectangularFile, rectangularBlock + 0x28) == 64 &&
+           ReadUInt32(rectangularFile, rectangularBlock + 0x2C) == 0 &&
+           ReadUInt32(rectangularFile, rectangularBlock + 0x30) == (128u << 8 | 1u) &&
+           ReadUInt32(rectangularFile, rectangularBlock + 0x34) == 128u << 10 &&
+           ReadUInt32(rectangularFile, rectangularBlock + 0x38) == 64u << 8,
+        "Заголовок 0x32E3/0x43E3 для 128x64 не сохранил width/height mirrors.");
+    Assert(rectangularFile[rectangularBlock + 0x3C] == 0,
+        "Прямоугольный resize изменил serializer marker на +0x3C.");
+    AssertRawBgraPixel(
+        rectangularFile, rectangularTexture.PixelDataOffset,
+        rectangularColor, "resize 128x64, первый пиксель");
+    AssertRawBgraPixel(
+        rectangularFile,
+        rectangularTexture.PixelDataOffset + rectangularTexture.PixelDataSize - 4,
+        rectangularColor, "resize 128x64, последний пиксель");
+
     string resizedPng = Path.Combine(temporary, "resized-2048.png");
     using (var resizedImage = new Image<Rgba32>(2048, 2048, new Rgba32(20, 40, 60, 255)))
         resizedImage.SaveAsPng(resizedPng);
@@ -139,11 +224,24 @@ try
     Assert(resizedFile.Length == resizeOriginal.Length + (2048 * 2048 - 64 * 64) * 4,
         "Итоговый размер SMO пересчитан неверно.");
     TextureInfo resizedTexture = resizedDocument.Textures[0];
+    Assert(resizedTexture.Layout == TextureLayout.Bgra &&
+           resizedTexture.PixelDataOffset == resizedTexture.BlockOffset + 0x3D,
+        "Пересобранная 0x32E3/0x43E3 текстура потеряла BGRA/+0x3D layout.");
+    Assert(resizedFile[resizedTexture.BlockOffset + 0x3C] ==
+           resizeOriginal[resizeDocument.Textures[0].BlockOffset + 0x3C] &&
+           resizedFile[resizedTexture.BlockOffset + 0x3C] == 0,
+        "Resize изменил serializer marker на +0x3C.");
+    AssertRawBgraPixel(
+        resizedFile, resizedTexture.PixelDataOffset,
+        new Rgba32(20, 40, 60, 255), "resize, первый пиксель");
+    AssertRawBgraPixel(
+        resizedFile, resizedTexture.PixelDataOffset + resizedTexture.PixelDataSize - 4,
+        new Rgba32(20, 40, 60, 255), "resize, последний пиксель");
     uint resizedPixelBytes = checked((uint)resizedTexture.PixelDataSize);
     Assert(ReadUInt32(resizedFile, resizedTexture.BlockOffset + 0x09) == resizedPixelBytes + 0x32 &&
            ReadUInt32(resizedFile, resizedTexture.BlockOffset + 0x1A) == resizedPixelBytes + 0x20 &&
            ReadUInt32(resizedFile, resizedTexture.BlockOffset + 0x1F) == resizedPixelBytes + 0x1A,
-        "32-битные размеры вложенных ABGR-блоков записаны неверно.");
+        "32-битные размеры вложенных 0x32E3/0x43E3-блоков записаны неверно.");
 
     if (args.Contains("--emit-alfea-2048", StringComparer.OrdinalIgnoreCase))
     {
@@ -227,6 +325,31 @@ static void Assert(bool condition, string message)
 {
     if (!condition)
         throw new InvalidOperationException(message);
+}
+
+static void AssertRawBgraPixel(
+    byte[] data, int offset, Rgba32 expected, string context)
+{
+    Assert(data[offset] == expected.B &&
+           data[offset + 1] == expected.G &&
+           data[offset + 2] == expected.R &&
+           data[offset + 3] == expected.A,
+        $"{context}: raw BGRA не совпадает с декодированным RGBA.");
+}
+
+static void AssertThrows<TException>(Action action, string message)
+    where TException : Exception
+{
+    try
+    {
+        action();
+    }
+    catch (TException)
+    {
+        return;
+    }
+
+    throw new InvalidOperationException(message);
 }
 
 static uint ReadUInt32(byte[] data, int offset) =>

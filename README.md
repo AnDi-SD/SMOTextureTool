@@ -1,18 +1,20 @@
-# SMO Texture Tool 2.0
+# SMO Texture Tool 2.1
 
 **Texture extractor and repacker for Winx Club PC `.smo` models**<br>
 **Инструмент для извлечения и замены текстур в `.smo`-моделях Winx Club для ПК**
 
 > [!WARNING]
-> **The writer/repacker is not game-safe and is disabled.** Files produced by
-> the former replacement path could pass this tool's validation and still crash
-> the game. Use this application only to inspect and export textures. For the
-> game-tested fixed-size RGB replacement path, use `tools/SmoImporter`.
+> **The GUI writer/repacker remains disabled.** Version 2.1 fixes the parser bug
+> behind the former game crash, but resized/repacked files have not completed a
+> native validation pass. Use this application only to inspect and export
+> textures. For the game-tested fixed-size RGB replacement path, use
+> `tools/SmoImporter`.
 >
-> **Запись/repack не совместимы с игрой и отключены.** Созданные прежним
-> алгоритмом файлы могли проходить внутреннюю проверку, но вызывать вылет игры.
-> Используйте программу только для просмотра и экспорта текстур. Подтверждённая
-> в игре fixed-size замена RGB реализована в `tools/SmoImporter`.
+> **Запись/repack в GUI остаются отключены.** Версия 2.1 исправляет ошибку parser-а,
+> из-за которой прежние файлы вызывали вылет игры, но resize/repack ещё не прошёл
+> отдельную нативную проверку. Используйте программу только для просмотра и
+> экспорта текстур. Подтверждённая в игре fixed-size замена RGB реализована в
+> `tools/SmoImporter`.
 
 ---
 
@@ -27,19 +29,25 @@
 
 ## 📌 Description
 
-**SMO Texture Tool 2.0** is a desktop utility for editing embedded textures in
+**SMO Texture Tool 2.1** is a desktop utility for inspecting embedded textures in
 model files from the PC version of **Winx Club**.
 
 Its currently supported read-only workflow can:
 
 - find and preview every supported texture in an SMO file;
 - export one texture or the complete set as PNG;
-- preserve ABGR and BGRA channel layouts used by the game;
+- preserve the BGRA channel layout used by supported game textures;
 - inspect RGB and Alpha channels separately;
 - preview grayscale textures with the vertex colors of their actual model;
 
 Texture replacement, resizing and SMO repacking are retained only as research
 code. Their GUI controls are disabled and their output must not be used in-game.
+
+Version 2.1 corrects the `0x32E3`/`0x43E3` layout: byte `+0x3C` is a required
+serializer marker, while BGRA pixels start at `+0x3D`. It also fixes the
+rectangular-texture height mirror and adds strict malformed-header and
+byte-identical round-trip regressions. A corrected fixed-size full-BGRA control
+file passed the native loader; resize/repack has not been game-validated.
 
 Version 2.0 has been rewritten with **Avalonia UI** and no longer depends on the
 Visual Studio WinForms designer.
@@ -85,8 +93,8 @@ the game with `D3DTOP_MODULATE`.
 
 ### 4. Replacement (disabled)
 
-The former replacement controls are disabled because parser validation did not
-predict compatibility with the original game.
+The former replacement controls remain disabled while the corrected resize and
+repack path awaits a separate native validation pass.
 
 Replacement images may be PNG, BMP, or JPEG. Both dimensions must be powers of
 two.
@@ -162,7 +170,7 @@ See `COPYRIGHT.txt` and `LICENSE.txt`.
 
 ## 📌 Описание
 
-**SMO Texture Tool 2.0** — read-only программа для исследования встроенных
+**SMO Texture Tool 2.1** — read-only программа для исследования встроенных
 текстур в файлах моделей ПК-версии **Winx Club**. Запись файлов отключена:
 результаты прежнего repack могли проходить проверку программы, но вызывать
 вылет оригинальной игры.
@@ -171,12 +179,19 @@ See `COPYRIGHT.txt` and `LICENSE.txt`.
 
 - поиск и просмотр всех поддерживаемых текстур внутри SMO;
 - сохранение отдельной текстуры или всего набора в PNG;
-- сохранение используемых игрой раскладок каналов ABGR и BGRA;
+- сохранение BGRA-раскладки каналов поддерживаемых игровых текстур;
 - отдельный просмотр RGB и Alpha;
 - просмотр серых текстур с цветами вершин их настоящей модели;
 
 Код замены и repack сохранён только для исследования формата. Для подтверждённой
 игрой fixed-size замены RGB используйте `tools/SmoImporter`.
+
+В версии 2.1 уточнена раскладка `0x32E3`/`0x43E3`: байт `+0x3C` является
+обязательным marker-ом сериализатора, а BGRA-пиксели начинаются с `+0x3D`.
+Исправлено зеркало высоты прямоугольной текстуры и добавлены строгие проверки
+повреждённого заголовка и побайтного round-trip. Исправленный fixed-size
+full-BGRA контрольный файл прошёл нативный загрузчик; resize/repack игрой ещё не
+проверялся.
 
 Версия 2.0 полностью переписана на **Avalonia UI** и больше не зависит от
 WinForms Designer в Visual Studio.
@@ -223,8 +238,8 @@ https://github.com/AnDi-SD/SMOTextureTool/releases
 
 ### 4. Замена текстур — отключена
 
-Элементы выбора замен отключены, поскольку внутренняя проверка parser-ом не
-гарантирует, что полученный файл загрузится игрой.
+Элементы выбора замен остаются отключены до отдельной нативной проверки
+исправленного resize/repack-пути.
 
 ### 5. Сохранение нового SMO — отключено
 

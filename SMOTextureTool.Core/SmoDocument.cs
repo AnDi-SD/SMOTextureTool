@@ -19,6 +19,8 @@ public sealed class SmoDocument
     private const int DataStartOffset = 0x14;
     private const int DataSizeOffset = 0x18;
     private const int MaximumDimension = TextureInfo.MaximumCurrentHeaderDimension;
+    private const int SerializedTextureDataMarkerOffset = 0x3C;
+    private const byte SerializedTextureDataMarker = 0;
 
     private readonly byte[] _data;
 
@@ -676,14 +678,32 @@ public sealed class SmoDocument
         ushort format = (ushort)(ReadUInt32(data, blockOffset + 0x08) & 0xFFFF);
         return format switch
         {
-            0x32E3 or 0x43E3 => TryCreateTexture(
-                data, index, blockOffset, blockOffset + 0x3C,
-                blockOffset + 0x24, blockOffset + 0x28, format, TextureLayout.Abgr),
+            0x32E3 or 0x43E3 => TryCreateSerializedBgraTexture(
+                data, index, blockOffset, format),
             0x29E3 => TryCreateTexture(
                 data, index, blockOffset, blockOffset + 0x34,
                 blockOffset + 0x28, blockOffset + 0x30, format, TextureLayout.Bgra),
             _ => null
         };
+    }
+
+    private static TextureInfo? TryCreateSerializedBgraTexture(
+        ReadOnlySpan<byte> data,
+        int index,
+        int blockOffset,
+        ushort format)
+    {
+        int markerOffset = checked(blockOffset + SerializedTextureDataMarkerOffset);
+        if (!CanRead(data, markerOffset, 1))
+            return null;
+        if (data[markerOffset] != SerializedTextureDataMarker)
+            throw new SmoFormatException(
+                $"Текстура 0x{format:X4} по смещению 0x{blockOffset:X} содержит " +
+                $"некорректный marker 0x{data[markerOffset]:X2} на +0x3C; ожидался 00.");
+
+        return TryCreateTexture(
+            data, index, blockOffset, blockOffset + 0x3D,
+            blockOffset + 0x24, blockOffset + 0x28, format, TextureLayout.Bgra);
     }
 
     private static TextureInfo? TryCreateTexture(
@@ -709,7 +729,7 @@ public sealed class SmoDocument
         if (pixelOffset < 0 || pixelOffset + size > data.Length)
             return null;
         if (size > uint.MaxValue ||
-            !HasExpectedTextureBlockSizes(data, blockOffset, (uint)size, layout))
+            !HasExpectedTextureBlockSizes(data, blockOffset, (uint)size, format))
             return null;
 
         TextureChannelInfo channels =
@@ -772,17 +792,17 @@ public sealed class SmoDocument
         ReadOnlySpan<byte> data,
         int blockOffset,
         uint pixelBytes,
-        TextureLayout layout)
+        ushort format)
     {
-        (int Marker, int Size, uint Tail)[] fields = layout switch
+        (int Marker, int Size, uint Tail)[] fields = format switch
         {
-            TextureLayout.Abgr =>
+            0x32E3 or 0x43E3 =>
             [
                 (0x08, 0x09, 0x32),
                 (0x19, 0x1A, 0x20),
                 (0x1E, 0x1F, 0x1A)
             ],
-            TextureLayout.Bgra =>
+            0x29E3 =>
             [
                 (0x08, 0x09, 0x29),
                 (0x10, 0x11, 0x20),
@@ -820,10 +840,19 @@ public sealed class SmoDocument
 
         if (image.Width != texture.Width || image.Height != texture.Height)
         {
-            if (texture.Layout == TextureLayout.Abgr)
-                PatchAbgrHeader(result, texture, image.Width, image.Height);
-            else
-                PatchBgraHeader(result, texture, image.Width, image.Height);
+            switch (texture.FormatCode)
+            {
+                case 0x32E3:
+                case 0x43E3:
+                    PatchSerializedBgraHeader(result, texture, image.Width, image.Height);
+                    break;
+                case 0x29E3:
+                    PatchLegacyBgraHeader(result, texture, image.Width, image.Height);
+                    break;
+                default:
+                    throw new SmoFormatException(
+                        $"Неподдерживаемый формат текстуры 0x{texture.FormatCode:X4}.");
+            }
         }
 
         return result;
@@ -891,7 +920,7 @@ public sealed class SmoDocument
 
     }
 
-    private static void PatchAbgrHeader(
+    private static void PatchSerializedBgraHeader(
         Span<byte> data, TextureInfo texture, int width, int height)
     {
         int block = texture.BlockOffset;
@@ -906,10 +935,10 @@ public sealed class SmoDocument
         WriteUInt32(data, block + 0x2C, 0);
         WriteUInt32(data, block + 0x30, ((uint)width << 8) | 1);
         WriteUInt32(data, block + 0x34, (uint)width << 10);
-        WriteUInt32(data, block + 0x38, (uint)width << 8);
+        WriteUInt32(data, block + 0x38, (uint)height << 8);
     }
 
-    private static void PatchBgraHeader(
+    private static void PatchLegacyBgraHeader(
         Span<byte> data, TextureInfo texture, int width, int height)
     {
         int block = texture.BlockOffset;
