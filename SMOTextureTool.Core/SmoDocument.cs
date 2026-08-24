@@ -399,7 +399,12 @@ public sealed class SmoDocument
             ExportTexture(texture, Path.Combine(directory, texture.FileName));
     }
 
-    public byte[] Repack(IReadOnlyDictionary<int, string> replacementFiles)
+    public byte[] Repack(IReadOnlyDictionary<int, string> replacementFiles) =>
+        Repack(replacementFiles, allowNonPowerOfTwoResize: false);
+
+    public byte[] Repack(
+        IReadOnlyDictionary<int, string> replacementFiles,
+        bool allowNonPowerOfTwoResize)
     {
         var replacements = new List<(TextureInfo Texture, Image<Rgba32> Image)>();
         try
@@ -410,26 +415,57 @@ public sealed class SmoDocument
                     continue;
 
                 Image<Rgba32> image = Image.Load<Rgba32>(path);
-                ValidateReplacement(texture, image);
+                ValidateReplacement(texture, image, allowNonPowerOfTwoResize);
                 replacements.Add((texture, image));
             }
-
-            byte[] result = _data.ToArray();
-            foreach ((TextureInfo texture, Image<Rgba32> image) in
-                     replacements.OrderByDescending(item => item.Texture.PixelDataOffset))
-            {
-                result = ReplaceOne(result, texture, image);
-            }
-
-            PatchFileHeader(result);
-            ValidateRepackedFile(result, Textures.Count, replacements);
-            return result;
+            return RepackLoadedImages(replacements);
         }
         finally
         {
             foreach (var replacement in replacements)
                 replacement.Image.Dispose();
         }
+    }
+
+    public byte[] RepackEncodedImages(
+        IReadOnlyDictionary<int, ReadOnlyMemory<byte>> replacementImages,
+        bool allowNonPowerOfTwoResize = false)
+    {
+        var replacements = new List<(TextureInfo Texture, Image<Rgba32> Image)>();
+        try
+        {
+            foreach (TextureInfo texture in Textures)
+            {
+                if (!replacementImages.TryGetValue(
+                        texture.Index, out ReadOnlyMemory<byte> encoded))
+                    continue;
+
+                Image<Rgba32> image = Image.Load<Rgba32>(encoded.Span);
+                ValidateReplacement(texture, image, allowNonPowerOfTwoResize);
+                replacements.Add((texture, image));
+            }
+            return RepackLoadedImages(replacements);
+        }
+        finally
+        {
+            foreach (var replacement in replacements)
+                replacement.Image.Dispose();
+        }
+    }
+
+    private byte[] RepackLoadedImages(
+        IReadOnlyCollection<(TextureInfo Texture, Image<Rgba32> Image)> replacements)
+    {
+        byte[] result = _data.ToArray();
+        foreach ((TextureInfo texture, Image<Rgba32> image) in
+                 replacements.OrderByDescending(item => item.Texture.PixelDataOffset))
+        {
+            result = ReplaceOne(result, texture, image);
+        }
+
+        PatchFileHeader(result);
+        ValidateRepackedFile(result, Textures.Count, replacements);
+        return result;
     }
 
     private static List<TextureInfo> FindTextures(byte[] data)
@@ -894,7 +930,9 @@ public sealed class SmoDocument
     }
 
     private static void ValidateReplacement(
-        TextureInfo texture, Image<Rgba32> image)
+        TextureInfo texture,
+        Image<Rgba32> image,
+        bool allowNonPowerOfTwoResize)
     {
         if (image.Width is <= 0 or > MaximumDimension ||
             image.Height is <= 0 or > MaximumDimension)
@@ -907,7 +945,8 @@ public sealed class SmoDocument
                 $"Текстуру {texture.Index} формата 0x{texture.FormatCode:X4} " +
                 "можно заменить только изображением исходного размера.");
 
-        if (resized && (!IsPowerOfTwo(image.Width) || !IsPowerOfTwo(image.Height)))
+        if (resized && !allowNonPowerOfTwoResize &&
+            (!IsPowerOfTwo(image.Width) || !IsPowerOfTwo(image.Height)))
             throw new SmoFormatException(
                 $"Размер текстуры {texture.Index} должен состоять из степеней двойки.");
 
@@ -982,7 +1021,11 @@ public sealed class SmoDocument
     {
         SmoDocument reparsed = Parse(data);
         if (reparsed.Textures.Count != expectedTextureCount)
-            throw new SmoFormatException("После пересборки изменилась структура текстур.");
+            throw new SmoFormatException(
+                $"После пересборки изменилась структура текстур: ожидалось " +
+                $"{expectedTextureCount}, найдено {reparsed.Textures.Count} " +
+                $"({string.Join(", ", reparsed.Textures.Select(texture =>
+                    $"0x{texture.BlockOffset:X}/{texture.Width}x{texture.Height}"))}).");
 
         foreach (var replacement in replacements)
         {
