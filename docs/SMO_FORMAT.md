@@ -1,5 +1,13 @@
 # Наблюдения о формате SMO
 
+> [!IMPORTANT]
+> Полный PC/PS2 corpus-анализ от 2026-08-27 уточнил этот исторический документ.
+> Значения `0x32E3`/`0x43E3` и похожие — field header плюс часть payload size,
+> а не pixel formats; `+0x3C` — последний байт `mipHeight`, не самостоятельный
+> marker. Pixel payload для этой обёртки действительно начинается с `+0x3D`.
+> Актуальная структура cross/Direct3D/PS2, палитр и mip описана в
+> [`smo-class-sp-texture-data.md`](../../../docs/research/smo-class-sp-texture-data.md).
+
 Документ фиксирует только подтверждённые сведения. Адреса относятся к
 `Samples/WinxClub.exe` с SHA-256:
 

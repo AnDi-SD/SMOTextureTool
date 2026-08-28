@@ -2,6 +2,10 @@
 
 ## Next
 
+- Full-corpus `spTextureData` research supersedes the 2.1 marker terminology:
+  `0x32E3`/`0x43E3` are field header/size signatures and `+0x3C` belongs to
+  `mipHeight`; the practical BGRA boundary at `+0x3D` remains correct. The
+  disabled writer has not yet been migrated to the new structural decoder.
 - Core получил overload для repack уже декодированных изображений и отдельное
   явное разрешение представимых NPOT-размеров. GUI SMOTextureTool не включает эту
   возможность; API используется SmoImporter, который дополнительно пересчитывает

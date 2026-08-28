@@ -4,13 +4,23 @@
 **Инструмент для извлечения и замены текстур в `.smo`-моделях Winx Club для ПК**
 
 > [!WARNING]
-> **The GUI writer/repacker remains disabled.** Version 2.1 fixes the parser bug
+> **The GUI writer/repacker remains disabled.** The 2026-08-27 full-corpus
+> analysis supersedes one 2.1 interpretation: `0x32E3`/`0x43E3` are field
+> header/size bytes, not texture formats, and `+0x3C` is the final byte of
+> `mipHeight`, not a standalone marker. The pixel boundary at `+0x3D` remains
+> correct for that wrapper. See
+> [`spTextureData` research](../../docs/research/smo-class-sp-texture-data.md).
+> Version 2.1 fixes the practical off-by-one writer bug,
 > behind the former game crash, but resized/repacked files have not completed a
 > native validation pass. Use this application only to inspect and export
 > textures. For the game-tested fixed-size RGB replacement path, use
 > `tools/SmoImporter`.
 >
-> **Запись/repack в GUI остаются отключены.** Версия 2.1 исправляет ошибку parser-а,
+> **Запись/repack в GUI остаются отключены.** Полный анализ корпуса от
+> 2026-08-27 исправил трактовку 2.1: `0x32E3`/`0x43E3` — байты header/size, а
+> `+0x3C` — последний байт `mipHeight`, не отдельный marker. Граница pixels
+> `+0x3D` для этой обёртки остаётся верной. Версия 2.1 исправляет практическую
+> ошибку parser-а,
 > из-за которой прежние файлы вызывали вылет игры, но resize/repack ещё не прошёл
 > отдельную нативную проверку. Используйте программу только для просмотра и
 > экспорта текстур. Подтверждённая в игре fixed-size замена RGB реализована в
