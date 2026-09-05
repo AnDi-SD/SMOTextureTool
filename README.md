@@ -138,7 +138,8 @@ writer, which preserves the original alpha bytes, headers, offsets and file size
 
 Requirements:
 
-- .NET 8 SDK or newer;
+- .NET SDK 9.0.300 or newer (the application still targets the .NET 8 runtime;
+  the newer SDK is required by the `.slnx` format and Avalonia 12.1 generators);
 - Windows, Linux, or macOS for development.
 
 ```powershell
@@ -279,7 +280,8 @@ pixel buffer.
 
 ## 🛠 Разработка
 
-Требуется .NET 8 SDK или новее.
+Требуется .NET SDK 9.0.300 или новее. Само приложение по-прежнему рассчитано на
+.NET 8 Runtime; более новый SDK нужен для `.slnx` и генераторов Avalonia 12.1.
 
 ```powershell
 dotnet restore SMOTextureTool.slnx

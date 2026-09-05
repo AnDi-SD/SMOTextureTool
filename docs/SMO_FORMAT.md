@@ -184,14 +184,17 @@ target-scoped native load без исключения; она пока оста�
 
 ## Тени и монохромные ресурсы
 
-В движке зарегистрирована отдельная иерархия теневых ресурсов:
+Полная PC registration table исправляет прежние сокращённые имена трёх ID:
 
-- `0x63FEA321`: `spShadowVolume`;
-- `0x04680BC1`: `spDXShadowVolume`;
-- `0x774E52E3`: `spDXShadowMesh`.
+- `0x63FEA321`: `spShadowVolumeManager`;
+- `0x04680BC1`: `spDXShadowVolumeManager`;
+- `0x774E52E3`: `spDXShadowMeshSerializer`.
 
-Это геометрические теневые объёмы, а не `spTextureData`. Ни один из этих class ID
-не встречается в текущих 14 образцах SMO. Поэтому серое изображение среди
+Это manager/serializer, а не сами геометрические теневые объёмы. Сами
+зарегистрированные типы имеют другие ID: `spShadowVolume` — `0x76023DE6`,
+`spDXShadowVolume` — `0x6EB62376`, `spShadowVolumeMesh` — `0x1546FE53`,
+`spDXShadowVolumeMesh` — `0x9FE94370`. Ни один из трёх ID из списка выше не
+встречается в текущих 14 образцах SMO. Поэтому серое изображение среди
 извлечённых `spTextureData` нельзя автоматически называть картой тени.
 
 Интерфейс разделяет содержимое только по доказуемым признакам:
@@ -260,9 +263,9 @@ diffuse-цветами. Для телефона при растрировани�
 - `0x234C576B`: `spStdLayer`;
 - `0x7F577C6D`: `spMaterialTextureLayer`;
 - `0x427C7480`: `spEnvironmentMapLayer`;
-- `0x63FEA321`: `spShadowVolume`;
-- `0x04680BC1`: `spDXShadowVolume`;
-- `0x774E52E3`: `spDXShadowMesh`.
+- `0x63FEA321`: `spShadowVolumeManager`;
+- `0x04680BC1`: `spDXShadowVolumeManager`;
+- `0x774E52E3`: `spDXShadowMeshSerializer`.
 
 Сигнатура сериализованного объекта состоит из little-endian class ID и ASCII
 `SBOO`. Например, `spTextureData` начинается с
